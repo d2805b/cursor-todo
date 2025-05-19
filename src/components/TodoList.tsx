@@ -1,7 +1,21 @@
 import React from 'react';
 import { Todo, FilterType } from '../types/todo';
 import { TodoItem } from './TodoItem';
-import { DragDropContext, Droppable, DropResult } from 'react-beautiful-dnd';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 
 interface TodoListProps {
   todos: Todo[];
@@ -24,38 +38,47 @@ export const TodoList: React.FC<TodoListProps> = ({
     return true;
   });
 
-  const handleDragEnd = (result: DropResult) => {
-    if (!result.destination) return;
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
-    const items = Array.from(filteredTodos);
-    const [reorderedItem] = items.splice(result.source.index, 1);
-    items.splice(result.destination.index, 0, reorderedItem);
-
-    onReorder(items);
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    if (over && active.id !== over.id) {
+      const oldIndex = filteredTodos.findIndex((todo) => todo.id === active.id);
+      const newIndex = filteredTodos.findIndex((todo) => todo.id === over.id);
+      
+      const newTodos = arrayMove(filteredTodos, oldIndex, newIndex);
+      onReorder(newTodos);
+    }
   };
 
   return (
-    <DragDropContext onDragEnd={handleDragEnd}>
-      <Droppable droppableId="todos">
-        {(provided) => (
-          <div
-            {...provided.droppableProps}
-            ref={provided.innerRef}
-            className="space-y-2"
-          >
-            {filteredTodos.map((todo, index) => (
-              <TodoItem
-                key={todo.id}
-                todo={todo}
-                index={index}
-                onToggle={onToggle}
-                onDelete={onDelete}
-              />
-            ))}
-            {provided.placeholder}
-          </div>
-        )}
-      </Droppable>
-    </DragDropContext>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={handleDragEnd}
+    >
+      <SortableContext
+        items={filteredTodos.map(todo => todo.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        <div className="space-y-2">
+          {filteredTodos.map((todo, index) => (
+            <TodoItem
+              key={todo.id}
+              todo={todo}
+              index={index}
+              onToggle={onToggle}
+              onDelete={onDelete}
+            />
+          ))}
+        </div>
+      </SortableContext>
+    </DndContext>
   );
 }; 
